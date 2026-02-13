@@ -22,6 +22,14 @@ const SuperAdminPage = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   
+  // Delete confirmation modal
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  
+  // Edit form state
+  const [editFormData, setEditFormData] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  
   // Search and filter states
   const [teacherSearch, setTeacherSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
@@ -225,15 +233,71 @@ const SuperAdminPage = () => {
   const studentPages = Math.ceil(filteredStudents.length / itemsPerPage);
   const userPages = Math.ceil(filteredAllUsers.length / itemsPerPage);
 
-  // Delete user handler
-  const handleDeleteUser = async (userId, userName) => {
-    if (!window.confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      return;
-    }
+  // Edit user handler
+  const handleEditUser = async (e) => {
+    e.preventDefault();
     
     try {
-      // TODO: Implement delete API call
-      // await userAPI.deleteUser(userId);
+      setIsEditing(true);
+      
+      const updateData = {
+        firstName: editFormData.firstName,
+        lastName: editFormData.lastName,
+        email: editFormData.email,
+        isActive: editFormData.isActive === 'active'
+      };
+      
+      const response = await userAPI.updateUser(selectedUser.id, updateData);
+      
+      if (response.status === 'success') {
+        toast.success('✅ User updated successfully!', {
+          duration: 4000,
+          style: {
+            background: '#10b981',
+            color: '#fff',
+          },
+        });
+        
+        // Reload all data
+        const [teachersData, studentsData, allUsersData] = await Promise.all([
+          userAPI.getAllTeachers(),
+          userAPI.getAllStudents(),
+          userAPI.getAllUsers()
+        ]);
+        
+        setTeachers(teachersData.data);
+        setStudents(studentsData.data);
+        setAllUsers(allUsersData.data);
+        
+        setShowEditModal(false);
+        setEditFormData(null);
+      }
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      toast.error(errorInfo.message, {
+        duration: 4000,
+        style: {
+          background: '#ef4444',
+          color: '#fff',
+        },
+      });
+    } finally {
+      setIsEditing(false);
+    }
+  };
+  
+  // Delete user handler
+  const handleDeleteUser = async (userId, userName) => {
+    setUserToDelete({ id: userId, name: userName });
+    setShowDeleteConfirm(true);
+  };
+  
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
+    
+    try {
+      await userAPI.deleteUser(userToDelete.id);
+      
       toast.success('✅ User deleted successfully!', {
         duration: 4000,
         style: {
@@ -259,6 +323,9 @@ const SuperAdminPage = () => {
           color: '#fff',
         },
       });
+    } finally {
+      setShowDeleteConfirm(false);
+      setUserToDelete(null);
     }
   };
 
@@ -734,7 +801,6 @@ const SuperAdminPage = () => {
                           <th className="border border-gray-200 px-4 py-2 text-left">Username</th>
                           <th className="border border-gray-200 px-4 py-2 text-left">Email</th>
                           <th className="border border-gray-200 px-4 py-2 text-left">Status</th>
-                          <th className="border border-gray-200 px-4 py-2 text-left">Teacher</th>
                           <th className="border border-gray-200 px-4 py-2 text-left">Created</th>
                           <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                         </tr>
@@ -759,9 +825,6 @@ const SuperAdminPage = () => {
                               }`}>
                                 {student.isActive ? 'Active' : 'Inactive'}
                               </span>
-                            </td>
-                            <td className="border border-gray-200 px-4 py-2">
-                              {student.teacher ? `${student.teacher.firstName} ${student.teacher.lastName}` : 'N/A'}
                             </td>
                             <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">
                               {new Date(student.createdAt).toLocaleDateString()}
@@ -1389,6 +1452,12 @@ const SuperAdminPage = () => {
                     onClick={() => {
                       setShowViewModal(false);
                       setShowEditModal(true);
+                      setEditFormData({
+                        firstName: selectedUser.firstName,
+                        lastName: selectedUser.lastName,
+                        email: selectedUser.email,
+                        isActive: selectedUser.isActive ? 'active' : 'inactive'
+                      });
                     }}
                     className="btn btn-primary"
                   >
@@ -1416,13 +1485,15 @@ const SuperAdminPage = () => {
                   </button>
                 </div>
                 
-                <form className="space-y-5">
+                <form className="space-y-5" onSubmit={handleEditUser}>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                       <input
                         type="text"
-                        defaultValue={selectedUser.firstName}
+                        value={editFormData?.firstName || ''}
+                        onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
+                        required
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
@@ -1430,7 +1501,9 @@ const SuperAdminPage = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                       <input
                         type="text"
-                        defaultValue={selectedUser.lastName}
+                        value={editFormData?.lastName || ''}
+                        onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
+                        required
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
@@ -1440,7 +1513,9 @@ const SuperAdminPage = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                     <input
                       type="email"
-                      defaultValue={selectedUser.email}
+                      value={editFormData?.email || ''}
+                      onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                      required
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -1448,7 +1523,8 @@ const SuperAdminPage = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                     <select
-                      defaultValue={selectedUser.isActive ? 'active' : 'inactive'}
+                      value={editFormData?.isActive || 'active'}
+                      onChange={(e) => setEditFormData({...editFormData, isActive: e.target.value})}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="active">Active</option>
@@ -1469,30 +1545,74 @@ const SuperAdminPage = () => {
                   <div className="flex space-x-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => setShowEditModal(false)}
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setEditFormData(null);
+                      }}
+                      disabled={isEditing}
                       className="btn btn-secondary flex-1"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        toast.success('✅ User updated successfully!', {
-                          duration: 4000,
-                          style: {
-                            background: '#10b981',
-                            color: '#fff',
-                          },
-                        });
-                        setShowEditModal(false);
-                      }}
-                      className="btn btn-primary flex-1"
+                      disabled={isEditing}
+                      className={`btn btn-primary flex-1 ${isEditing ? 'loading' : ''}`}
                     >
-                      Save Changes
+                      {isEditing ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          Updating...
+                        </>
+                      ) : (
+                        'Save Changes'
+                      )}
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && userToDelete && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowDeleteConfirm(false)}>
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="p-8">
+                <div className="flex items-center justify-center mb-6">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                    <Trash2 className="h-8 w-8 text-red-600" />
+                  </div>
+                </div>
+                
+                <h3 className="text-2xl font-bold text-gray-900 text-center mb-2">Delete User</h3>
+                <p className="text-gray-600 text-center mb-6">
+                  Are you sure you want to delete <span className="font-semibold text-gray-900">{userToDelete.name}</span>?
+                </p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-red-800">
+                    ⚠️ <strong>Warning:</strong> This action cannot be undone. All user data will be permanently deleted.
+                  </p>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setUserToDelete(null);
+                    }}
+                    className="btn btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={confirmDelete}
+                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                  >
+                    Delete User
+                  </button>
+                </div>
               </div>
             </div>
           </div>

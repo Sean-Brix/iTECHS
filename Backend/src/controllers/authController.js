@@ -108,7 +108,14 @@ const login = async (req, res, next) => {
     if (user.role === 'TEACHER') {
       // Generate OTP
       const otpCode = generateOTP();
-      const otpExpiry = generateOTPExpiry(10); // 10 minutes
+      const otpExpiry = generateOTPExpiry(30); // 30 minutes
+
+      console.log('📧 OTP Generated:', {
+        email: user.email,
+        otpCode,
+        expiryTime: otpExpiry.toISOString(),
+        minutesValid: 30
+      });
 
       // Update user with OTP
       await prisma.user.update({
@@ -128,7 +135,8 @@ const login = async (req, res, next) => {
           { 
             requiresOTP: true,
             userId: user.id,
-            email: user.email.replace(/(.{2}).*(@.*)/, '$1****$2') // Masked email
+            email: user.email, // Full email needed for OTP verification
+            maskedEmail: user.email.replace(/(.{2}).*(@.*)/, '$1****$2') // For display only
           },
           'OTP sent to your email. Please verify to complete login.'
         )
@@ -170,22 +178,40 @@ const verifyOTP = async (req, res, next) => {
   try {
     const { email, otpCode } = req.body;
     
-    // Find user with valid OTP
-    const user = await prisma.user.findFirst({
+    // First find user with email and OTP code (debug step)
+    const userWithOTP = await prisma.user.findFirst({
       where: {
         email,
-        otpCode,
-        otpExpiry: {
-          gt: new Date()
-        }
+        otpCode
       }
     });
 
-    if (!user) {
+    if (!userWithOTP) {
+      console.log('❌ No user found with email and OTP code:', { email, otpCode });
       return res.status(400).json(
-        errorResponse('Invalid or expired OTP')
+        errorResponse('Invalid OTP code')
       );
     }
+
+    // Check if OTP has expired
+    const now = new Date();
+    const expiry = new Date(userWithOTP.otpExpiry);
+    
+    console.log('🕐 OTP Time Check:', {
+      email,
+      currentTime: now.toISOString(),
+      expiryTime: expiry.toISOString(),
+      minutesRemaining: ((expiry - now) / 1000 / 60).toFixed(2),
+      isExpired: now >= expiry
+    });
+
+    if (!userWithOTP.otpExpiry || now >= expiry) {
+      return res.status(400).json(
+        errorResponse('OTP has expired. Please request a new one.')
+      );
+    }
+
+    const user = userWithOTP;
 
     // Clear OTP and mark as verified
     const updatedUser = await prisma.user.update({
@@ -244,7 +270,14 @@ const requestOTP = async (req, res, next) => {
 
     // Generate OTP
     const otpCode = generateOTP();
-    const otpExpiry = generateOTPExpiry(10);
+    const otpExpiry = generateOTPExpiry(30); // 30 minutes
+
+    console.log('🔄 OTP Requested:', {
+      email: user.email,
+      otpCode,
+      expiryTime: otpExpiry.toISOString(),
+      minutesValid: 30
+    });
 
     // Update user with OTP
     await prisma.user.update({

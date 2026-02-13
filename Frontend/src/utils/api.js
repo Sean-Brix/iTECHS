@@ -29,11 +29,18 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Handle token expiration
+    // Handle token expiration (but not for login/register endpoints)
     if (error.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      window.location.href = '/';
+      const isAuthEndpoint = error.config?.url?.includes('/auth/login') || 
+                            error.config?.url?.includes('/auth/register') ||
+                            error.config?.url?.includes('/auth/verify-otp');
+      
+      // Only redirect if it's NOT an auth endpoint (meaning it's a protected route with expired token)
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+      }
     }
     
     return Promise.reject(error);
@@ -195,6 +202,11 @@ export const handleAPIError = (error) => {
     // Server returned error response
     const data = error.response.data;
     let message = data?.message || 'An error occurred';
+    
+    // Handle rate limiting specifically
+    if (error.response.status === 429) {
+      message = data?.message || 'Too many requests. Please wait a moment and try again.';
+    }
     
     // If there are validation errors, format them nicely
     if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {

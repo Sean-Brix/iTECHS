@@ -111,22 +111,44 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        dispatch({ type: authActionTypes.SET_LOADING, payload: true });
+        
         const token = localStorage.getItem('authToken');
-        const user = localStorage.getItem('user');
+        const userString = localStorage.getItem('user');
 
-        if (token && user) {
+        if (token && userString) {
+          // Parse user data safely
+          let parsedUser;
+          try {
+            parsedUser = JSON.parse(userString);
+          } catch (parseError) {
+            console.error('Failed to parse user data from localStorage:', parseError);
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            dispatch({ type: authActionTypes.SET_LOADING, payload: false });
+            return;
+          }
+          
           // Verify token is still valid by fetching user profile
-          const response = await authAPI.getProfile();
-          if (response.status === 'success') {
-            dispatch({
-              type: authActionTypes.LOGIN_SUCCESS,
-              payload: {
-                user: response.data,
-                token,
-              },
-            });
-          } else {
-            // Token invalid, clear storage
+          try {
+            const response = await authAPI.getProfile();
+            if (response.status === 'success') {
+              dispatch({
+                type: authActionTypes.LOGIN_SUCCESS,
+                payload: {
+                  user: response.data,
+                  token,
+                },
+              });
+            } else {
+              // Token invalid, clear storage
+              localStorage.removeItem('authToken');
+              localStorage.removeItem('user');
+              dispatch({ type: authActionTypes.SET_LOADING, payload: false });
+            }
+          } catch (profileError) {
+            // Token invalid or expired, clear storage
+            console.log('Token validation failed:', profileError.message);
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
             dispatch({ type: authActionTypes.SET_LOADING, payload: false });
@@ -135,7 +157,8 @@ export const AuthProvider = ({ children }) => {
           dispatch({ type: authActionTypes.SET_LOADING, payload: false });
         }
       } catch (error) {
-        // Token invalid or network error
+        // Catch any unexpected errors
+        console.error('Auth initialization error:', error);
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
         dispatch({ type: authActionTypes.SET_LOADING, payload: false });
@@ -162,6 +185,7 @@ export const AuthProvider = ({ children }) => {
               userId: response.data.userId,
             },
           });
+          dispatch({ type: authActionTypes.SET_LOADING, payload: false });
           return { requiresOTP: true };
         } else {
           // Direct login successful (student/super admin)
@@ -178,6 +202,10 @@ export const AuthProvider = ({ children }) => {
           
           return { success: true, user };
         }
+      } else {
+        // Handle non-success response
+        dispatch({ type: authActionTypes.SET_LOADING, payload: false });
+        throw new Error(response.message || 'Login failed');
       }
     } catch (error) {
       dispatch({ type: authActionTypes.SET_LOADING, payload: false });

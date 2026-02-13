@@ -7,12 +7,32 @@ import { handleAPIError } from '../utils/api';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { login, verifyOTP, requiresOTP, otpEmail, isLoading } = useAuth();
+  const { login, verifyOTP, requiresOTP, otpEmail, isLoading, user } = useAuth();
   
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [otpStep, setOtpStep] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    if (user && user.role) {
+      const redirectPaths = {
+        TEACHER: '/teacher',
+        SUPER_ADMIN: '/admin',
+        STUDENT: '/student',
+      };
+      
+      const redirectTo = redirectPaths[user.role] || '/';
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, navigate]);
+  
+  // Helper function to mask email for display
+  const maskEmail = (email) => {
+    if (!email) return '';
+    return email.replace(/(.{2}).*(@.*)/, '$1****$2');
+  };
   
   // Form for login
   const loginForm = useForm({
@@ -118,6 +138,18 @@ const LoginPage = () => {
       toast.error('Failed to resend OTP');
     }
   };
+
+  // Show loading while checking auth status
+  if (isLoading && !isSubmitting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-white">
@@ -249,7 +281,7 @@ const LoginPage = () => {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Two-Factor Authentication</h2>
               <p className="text-gray-500 mb-8">
                 We sent a secure code to your email <br/>
-                <span className="text-gray-900 font-medium bg-gray-100 px-2 py-0.5 rounded">{otpEmail}</span>
+                <span className="text-gray-900 font-medium bg-gray-100 px-2 py-0.5 rounded">{maskEmail(otpEmail)}</span>
               </p>
 
               <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
