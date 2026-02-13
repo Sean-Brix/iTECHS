@@ -1,0 +1,103 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id            String     @id @default(cuid())
+  username      String     @unique
+  email         String     @unique
+  password      String
+  role          UserRole   @default(STUDENT)
+  firstName     String?
+  lastName      String?
+  isActive      Boolean    @default(true)
+  isVerified    Boolean    @default(false)
+  lastLogin     DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // OTP fields
+  otpCode       String?
+  otpExpiry     DateTime?
+  otpVerified   Boolean    @default(false)
+
+  // Relationships
+  createdStudents User[]   @relation("TeacherStudents")
+  teacher       User?     @relation("TeacherStudents", fields: [teacherId], references: [id])
+  teacherId     String?
+
+  exams         Exam[]    @relation("StudentExams")
+  scores        Score[]
+  createdExams  Exam[]    @relation("TeacherExams")
+
+  @@map("users")
+}
+
+model Exam {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  examCode    String    @unique
+  isActive    Boolean   @default(true)
+  timeLimit   Int?      // in minutes
+  totalMarks  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relationships
+  teacher     User      @relation("TeacherExams", fields: [teacherId], references: [id])
+  teacherId   String
+  students    User[]    @relation("StudentExams")
+  scores      Score[]
+  questions   Question[]
+
+  @@map("exams")
+}
+
+model Question {
+  id          String    @id @default(cuid())
+  question    String
+  options     Json?     // Store as JSON array for multiple choice
+  correctAnswer String
+  marks       Int       @default(1)
+  type        String    @default("multiple_choice") // multiple_choice, true_false, short_answer, etc.
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relationships
+  exam        Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  examId      String
+
+  @@map("questions")
+}
+
+model Score {
+  id          String    @id @default(cuid())
+  totalMarks  Int
+  obtainedMarks Int
+  percentage  Float
+  timeTaken   Int?      // in minutes
+  completedAt DateTime  @default(now())
+
+  // Relationships
+  student     User      @relation(fields: [studentId], references: [id])
+  studentId   String
+  exam        Exam      @relation(fields: [examId], references: [id])
+  examId      String
+
+  @@map("scores")
+}
