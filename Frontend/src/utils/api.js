@@ -126,9 +126,21 @@ export const userAPI = {
     return response.data;
   },
 
-  // Delete/deactivate user
-  deleteUser: async (id) => {
-    const response = await api.delete(`/users/${id}`);
+  // Delete/archive user
+  deleteUser: async (id, reason) => {
+    const response = await api.delete(`/users/${id}`, { data: { reason } });
+    return response.data;
+  },
+
+  // Restore archived user
+  restoreUser: async (id) => {
+    const response = await api.post(`/users/${id}/restore`);
+    return response.data;
+  },
+
+  // Get archived users
+  getArchivedUsers: async (params = {}) => {
+    const response = await api.get('/users/archived', { params });
     return response.data;
   },
 

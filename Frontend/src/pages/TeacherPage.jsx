@@ -7,35 +7,85 @@ const TeacherPage = () => {
   const { user, logout } = useAuth();
   const [exams, setExams] = useState([]);
   const [students, setStudents] = useState([]);
+  const [archivedStudents, setArchivedStudents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [studentViewTab, setStudentViewTab] = useState('active'); // 'active' or 'archived'
 
   // Load teacher data
   useEffect(() => {
-    const loadTeacherData = async () => {
-      try {
-        const [examsResponse, studentsResponse] = await Promise.all([
-          examAPI.getExams(),
-          userAPI.getMyStudents()
-        ]);
+    loadTeacherData();
+  }, [studentViewTab]);
 
-        if (examsResponse.status === 'success') {
-          setExams(examsResponse.data.exams || []);
-        }
+  const loadTeacherData = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Loading teacher data, studentViewTab:', studentViewTab);
+      const examsResponse = await examAPI.getExams();
+      
+      if (examsResponse.status === 'success') {
+        setExams(examsResponse.data.exams || []);
+      }
 
+      // Load students based on the active view tab
+      if (studentViewTab === 'active') {
+        console.log('Fetching active students...');
+        const studentsResponse = await userAPI.getMyStudents({ isArchived: 'false' });
         if (studentsResponse.status === 'success') {
           setStudents(studentsResponse.data.students || []);
+          console.log('Active students loaded:', studentsResponse.data.students?.length);
         }
-      } catch (error) {
-        const errorInfo = handleAPIError(error);
-        toast.error(errorInfo.message);
-      } finally {
-        setIsLoading(false);
+      } else {
+        console.log('Fetching archived students...');
+        const archivedResponse = await userAPI.getMyStudents({ isArchived: 'true' });
+        if (archivedResponse.status === 'success') {
+          setArchivedStudents(archivedResponse.data.students || []);
+          console.log('Archived students loaded:', archivedResponse.data.students?.length);
+        }
       }
-    };
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      toast.error(errorInfo.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    loadTeacherData();
-  }, []);
+  // Archive a student
+  const handleArchiveStudent = async (studentId, studentName) => {
+    if (!window.confirm(`Are you sure you want to archive ${studentName}?`)) {
+      return;
+    }
+
+    try {
+      const response = await userAPI.deleteUser(studentId, 'Archived by teacher');
+      if (response.status === 'success') {
+        toast.success('Student archived successfully');
+        loadTeacherData();
+      }
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      toast.error(errorInfo.message);
+    }
+  };
+
+  // Restore an archived student
+  const handleRestoreStudent = async (studentId, studentName) => {
+    if (!window.confirm(`Are you sure you want to restore ${studentName}?`)) {
+      return;
+    }
+
+    try {
+      const response = await userAPI.restoreUser(studentId);
+      if (response.status === 'success') {
+        toast.success('Student restored successfully');
+        loadTeacherData();
+      }
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      toast.error(errorInfo.message);
+    }
+  };
 
   // Demo data for demonstration
   const demoExams = [
@@ -143,21 +193,6 @@ const TeacherPage = () => {
         {/* Sidebar */}
         <div className="w-80 bg-white shadow-lg overflow-y-auto">
           <div className="p-6">
-            {/* Quick Stats */}
-            <div className="bg-gradient-to-r from-purple-500 to-blue-600 text-white p-4 rounded-xl mb-6">
-              <h3 className="text-lg font-semibold mb-2">Dashboard Overview</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{students.length || 24}</div>
-                  <div className="text-sm opacity-90">Students</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{demoExams.length}</div>
-                  <div className="text-sm opacity-90">Exams</div>
-                </div>
-              </div>
-            </div>
-
             {/* Navigation Tabs */}
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Navigation</h3>
@@ -211,49 +246,6 @@ const TeacherPage = () => {
               <div>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Dashboard Overview</h2>
                 <p className="text-gray-600">Manage your classes, create assessments, and track student progress.</p>
-              </div>
-
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="card border-blue-200 bg-blue-50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-blue-600">Total Students</p>
-                      <p className="text-3xl font-bold text-blue-900">{students.length || 24}</p>
-                    </div>
-                    <div className="text-3xl">👥</div>
-                  </div>
-                </div>
-
-                <div className="card border-green-200 bg-green-50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-green-600">Active Exams</p>
-                      <p className="text-3xl font-bold text-green-900">{demoExams.filter(e => e.isActive).length}</p>
-                    </div>
-                    <div className="text-3xl">📝</div>
-                  </div>
-                </div>
-
-                <div className="card border-purple-200 bg-purple-50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-purple-600">Total Assessments</p>
-                      <p className="text-3xl font-bold text-purple-900">{demoExams.length}</p>
-                    </div>
-                    <div className="text-3xl">📊</div>
-                  </div>
-                </div>
-
-                <div className="card border-orange-200 bg-orange-50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-orange-600">Average Score</p>
-                      <p className="text-3xl font-bold text-orange-900">78.9%</p>
-                    </div>
-                    <div className="text-3xl">📈</div>
-                  </div>
-                </div>
               </div>
 
               {/* Recent Activity */}
@@ -369,68 +361,171 @@ const TeacherPage = () => {
                 </button>
               </div>
 
-              {students.length === 0 ? (
-                <div className="card text-center py-12">
-                  <div className="text-6xl mb-4">👥</div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No Students Yet</h3>
-                  <p className="text-gray-600 mb-6">Start building your class by adding students</p>
-                  <button className="btn btn-primary">
-                    👤 Add Your First Student
+              {/* Active/Archived Tabs - ARCHIVE FEATURE */}
+              <div className="bg-white border-2 border-blue-500 rounded-lg p-4 mb-4">
+                <p className="text-sm text-gray-600 mb-3 font-semibold">📂 View Students by Status:</p>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => {
+                      console.log('Switching to Active tab');
+                      setStudentViewTab('active');
+                    }}
+                    className={`flex-1 py-3 px-6 rounded-md text-base font-bold transition-colors ${
+                      studentViewTab === 'active'
+                        ? 'bg-blue-600 text-white shadow-lg'
+                        : 'text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    ✅ Active Students ({students.length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('Switching to Archived tab');
+                      setStudentViewTab('archived');
+                    }}
+                    className={`flex-1 py-3 px-6 rounded-md text-base font-bold transition-colors ${
+                      studentViewTab === 'archived'
+                        ? 'bg-orange-600 text-white shadow-lg'
+                        : 'text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    📦 Archived Students ({archivedStudents.length})
                   </button>
                 </div>
-              ) : (
-                <div className="card">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {students.map((student) => (
-                          <tr key={student.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="bg-blue-100 rounded-full w-10 h-10 flex items-center justify-center">
-                                  <span className="text-blue-600 font-semibold">
-                                    {student.firstName?.[0]}{student.lastName?.[0]}
-                                  </span>
-                                </div>
-                                <div className="ml-4">
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {student.firstName} {student.lastName}
-                                  </div>
-                                  <div className="text-sm text-gray-500">{student.username}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                student.isActive 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {student.isActive ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(student.createdAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <button className="btn btn-secondary text-sm">
-                                👀 View Profile
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              </div>
+
+              {/* Students List */}
+              {isLoading ? (
+                <div className="card text-center py-12">
+                  <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading students...</p>
                 </div>
+              ) : studentViewTab === 'active' ? (
+                students.length === 0 ? (
+                  <div className="card text-center py-12">
+                    <div className="text-6xl mb-4">👥</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Active Students</h3>
+                    <p className="text-gray-600 mb-6">Start building your class by adding students</p>
+                    <button className="btn btn-primary">
+                      👤 Add Your First Student
+                    </button>
+                  </div>
+                ) : (
+                  <div className="card">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {students.map((student) => (
+                            <tr key={student.id}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="bg-blue-100 rounded-full w-10 h-10 flex items-center justify-center">
+                                    <span className="text-blue-600 font-semibold">
+                                      {student.firstName?.[0]}{student.lastName?.[0]}
+                                    </span>
+                                  </div>
+                                  <div className="ml-4">
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {student.firstName} {student.lastName}
+                                    </div>
+                                    <div className="text-sm text-gray-500">{student.username}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                  Active
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {new Date(student.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                                <button className="btn btn-secondary text-sm">
+                                  👀 View
+                                </button>
+                                <button 
+                                  onClick={() => handleArchiveStudent(student.id, `${student.firstName} ${student.lastName}`)}
+                                  className="btn bg-orange-500 hover:bg-orange-600 text-white text-sm"
+                                >
+                                  📦 Archive
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              ) : (
+                archivedStudents.length === 0 ? (
+                  <div className="card text-center py-12">
+                    <div className="text-6xl mb-4">📦</div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Archived Students</h3>
+                    <p className="text-gray-600">Archived students will appear here</p>
+                  </div>
+                ) : (
+                  <div className="card">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Archived On</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {archivedStudents.map((student) => (
+                            <tr key={student.id} className="bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="bg-gray-300 rounded-full w-10 h-10 flex items-center justify-center">
+                                    <span className="text-gray-600 font-semibold">
+                                      {student.firstName?.[0]}{student.lastName?.[0]}
+                                    </span>
+                                  </div>
+                                  <div className="ml-4">
+                                    <div className="text-sm font-medium text-gray-700">
+                                      {student.firstName} {student.lastName}
+                                    </div>
+                                    <div className="text-sm text-gray-500">{student.username}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                                  Archived
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {new Date(student.updatedAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                                <button 
+                                  onClick={() => handleRestoreStudent(student.id, `${student.firstName} ${student.lastName}`)}
+                                  className="btn bg-green-500 hover:bg-green-600 text-white text-sm"
+                                >
+                                  ↩️ Restore
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
               )}
             </div>
           )}

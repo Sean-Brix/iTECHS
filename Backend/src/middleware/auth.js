@@ -18,7 +18,7 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Get user from database to ensure they still exist and are active
+    // Get user from database to ensure they still exist and are not archived
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -28,7 +28,7 @@ const authenticateToken = async (req, res, next) => {
         role: true,
         firstName: true,
         lastName: true,
-        isActive: true,
+        isArchived: true,
         isVerified: true
       }
     });
@@ -40,10 +40,10 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    if (!user.isActive) {
+    if (user.isArchived) {
       return res.status(401).json({
         status: 'error',
-        message: 'Account has been deactivated'
+        message: 'Account has been archived'
       });
     }
 
@@ -122,12 +122,12 @@ const optionalAuth = async (req, res, next) => {
         role: true,
         firstName: true,
         lastName: true,
-        isActive: true,
+        isArchived: true,
         isVerified: true
       }
     });
 
-    req.user = user && user.isActive ? user : null;
+    req.user = user && !user.isArchived ? user : null;
     next();
   } catch (error) {
     req.user = null;

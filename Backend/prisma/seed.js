@@ -27,7 +27,7 @@ async function main() {
       firstName: 'Super',
       lastName: 'Admin',
       role: 'SUPER_ADMIN',
-      isActive: true,
+      isArchived: false,
       isVerified: true,
     },
   });
@@ -46,7 +46,7 @@ async function main() {
       firstName: 'John',
       lastName: 'Doe',
       role: 'TEACHER',
-      isActive: true,
+      isArchived: false,
       isVerified: true,
     },
   });
@@ -65,7 +65,7 @@ async function main() {
       firstName: 'Jane',
       lastName: 'Smith',
       role: 'STUDENT',
-      isActive: true,
+      isArchived: false,
       isVerified: true,
       teacherId: teacher.id, // Assign to the teacher
     },

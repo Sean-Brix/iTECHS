@@ -31,7 +31,7 @@ const initializeDatabase = async () => {
           role: 'SUPER_ADMIN',
           firstName: 'Super',
           lastName: 'Admin',
-          isActive: true,
+          isArchived: false,
           isVerified: true
         }
       });

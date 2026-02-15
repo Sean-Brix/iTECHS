@@ -5,6 +5,8 @@ const {
   createUser,
   updateUser,
   deleteUser,
+  restoreUser,
+  getArchivedUsers,
   getMyStudents,
   resetUserPassword
 } = require('../controllers/userController');
@@ -38,6 +40,20 @@ router.get('/', paginationValidation(), getUsers);
  * @access  Private (Teachers only)
  */
 router.get('/my-students', requireTeacher, paginationValidation(), getMyStudents);
+
+/**
+ * @route   GET /api/users/archived
+ * @desc    Get archived users
+ * @access  Private (Super Admin sees all, Teachers see their archived students)
+ */
+router.get('/archived', paginationValidation(), getArchivedUsers);
+
+/**
+ * @route   POST /api/users/:id/restore
+ * @desc    Restore archived user
+ * @access  Private (Super Admin or Teachers for their students)
+ */
+router.post('/:id/restore', idValidation(), restoreUser);
 
 /**
  * @route   GET /api/users/:id

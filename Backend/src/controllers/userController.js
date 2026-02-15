@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
 // Get all users (with pagination and filtering)
 const getUsers = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, role, search, isActive } = req.query;
+    const { page = 1, limit = 10, role, search, isArchived } = req.query;
     
     const where = {};
     
@@ -24,8 +24,8 @@ const getUsers = async (req, res, next) => {
       where.role = role;
     }
     
-    if (isActive !== undefined) {
-      where.isActive = isActive === 'true';
+    if (isArchived !== undefined) {
+      where.isArchived = isArchived === 'true';
     }
     
     if (search) {
@@ -115,7 +115,7 @@ const getUserById = async (req, res, next) => {
             firstName: true,
             lastName: true,
             email: true,
-            isActive: true,
+            isArchived: true,
             createdAt: true
           }
         },
@@ -277,7 +277,7 @@ const createUser = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, isActive } = req.body;
+    const { firstName, lastName, email, isArchived } = req.body;
     
     // Find user
     const user = await prisma.user.findUnique({
@@ -299,10 +299,10 @@ const updateUser = async (req, res, next) => {
         );
       }
       
-      // Teachers cannot change isActive status
-      if (isActive !== undefined && user.id !== req.user.id) {
+      // Teachers cannot change isArchived status
+      if (isArchived !== undefined && user.id !== req.user.id) {
         return res.status(403).json(
-          errorResponse('Teachers cannot activate/deactivate accounts')
+          errorResponse('Teachers cannot archive/unarchive accounts')
         );
       }
     } else if (req.user.role === 'STUDENT') {
@@ -337,8 +337,8 @@ const updateUser = async (req, res, next) => {
         ...(firstName !== undefined && { firstName }),
         ...(lastName !== undefined && { lastName }),
         ...(email && { email }),
-        ...(isActive !== undefined && 
-            req.user.role === 'SUPER_ADMIN' && { isActive })
+        ...(isArchived !== undefined && 
+            req.user.role === 'SUPER_ADMIN' && { isArchived })
       }
     });
 
@@ -355,14 +355,22 @@ const updateUser = async (req, res, next) => {
   }
 };
 
-// Delete user (deactivate)
+// Archive user (move to archive table)
 const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body;
     
-    // Find user
+    // Find user with all related data
     const user = await prisma.user.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        teacher: true,
+        createdStudents: true,
+        exams: true,
+        scores: true,
+        createdExams: true
+      }
     });
 
     if (!user) {
@@ -373,10 +381,10 @@ const deleteUser = async (req, res, next) => {
 
     // Check permissions
     if (req.user.role === 'TEACHER') {
-      // Teachers can only deactivate their students
+      // Teachers can only archive their students
       if (user.teacherId !== req.user.id) {
         return res.status(403).json(
-          errorResponse('Teachers can only deactivate their own students')
+          errorResponse('Teachers can only archive their own students')
         );
       }
     } else if (req.user.role !== 'SUPER_ADMIN') {
@@ -385,23 +393,49 @@ const deleteUser = async (req, res, next) => {
       );
     }
 
-    // Prevent self-deletion
+    // Prevent self-archiving
     if (user.id === req.user.id) {
       return res.status(400).json(
-        errorResponse('Cannot deactivate your own account')
+        errorResponse('Cannot archive your own account')
       );
     }
 
-    // Deactivate user instead of hard delete
-    const deactivatedUser = await prisma.user.update({
-      where: { id },
-      data: { isActive: false }
+    // Start transaction to move user to archive table
+    await prisma.$transaction(async (tx) => {
+      // Create archived user record with complete data
+      await tx.archivedUser.create({
+        data: {
+          userId: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          teacherId: user.teacherId,
+          archivedBy: req.user.id,
+          archiveReason: reason || 'No reason provided',
+          userData: JSON.stringify({
+            ...user,
+            scores: undefined, // Don't duplicate relational data
+            exams: undefined,
+            createdExams: undefined,
+            createdStudents: undefined,
+            teacher: undefined
+          })
+        }
+      });
+
+      // Mark user as archived in main table (soft delete)
+      await tx.user.update({
+        where: { id },
+        data: { isArchived: true }
+      });
     });
 
     res.status(200).json(
       successResponse(
         null,
-        'User deactivated successfully'
+        'User archived successfully'
       )
     );
   } catch (error) {
@@ -409,7 +443,111 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
-// Get students for a teacher
+// Restore archived user
+const restoreUser = async (req, res, next) => {
+  try {
+    const { id } = req.params; // This is the userId of the archived user
+    
+    // Find archived user
+    const archivedUser = await prisma.archivedUser.findUnique({
+      where: { userId: id }
+    });
+
+    if (!archivedUser) {
+      return res.status(404).json(
+        errorResponse('Archived user not found')
+      );
+    }
+
+    // Check permissions
+    if (req.user.role === 'TEACHER') {
+      // Teachers can only restore their students
+      if (archivedUser.teacherId !== req.user.id) {
+        return res.status(403).json(
+          errorResponse('Teachers can only restore their own students')
+        );
+      }
+    } else if (req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json(
+        errorResponse('Insufficient permissions')
+      );
+    }
+
+    // Start transaction to restore user
+    await prisma.$transaction(async (tx) => {
+      // Update user to mark as active
+      await tx.user.update({
+        where: { id },
+        data: { isArchived: false }
+      });
+
+      // Remove from archive table
+      await tx.archivedUser.delete({
+        where: { userId: id }
+      });
+    });
+
+    res.status(200).json(
+      successResponse(
+        null,
+        'User restored successfully'
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get archived users
+const getArchivedUsers = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, search } = req.query;
+    
+    const where = {};
+    
+    // For teachers, only show their archived students
+    if (req.user.role === 'TEACHER') {
+      where.teacherId = req.user.id;
+    }
+    
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    // Get total count
+    const totalCount = await prisma.archivedUser.count({ where });
+    
+    // Get pagination data
+    const paginationData = getPaginationData(page, limit, totalCount);
+    
+    // Get archived users
+    const archivedUsers = await prisma.archivedUser.findMany({
+      where,
+      orderBy: { archivedAt: 'desc' },
+      skip: paginationData.offset,
+      take: paginationData.limit
+    });
+
+    res.status(200).json(
+      successResponse(
+        {
+          archivedUsers,
+          ...paginationData.pagination
+        },
+        'Archived users retrieved successfully'
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get students for a teacher (active only by default)
 const getMyStudents = async (req, res, next) => {
   try {
     if (req.user.role !== 'TEACHER') {
@@ -418,15 +556,12 @@ const getMyStudents = async (req, res, next) => {
       );
     }
 
-    const { page = 1, limit = 10, search, isActive } = req.query;
+    const { page = 1, limit = 10, search, isArchived } = req.query;
     
     const where = {
-      teacherId: req.user.id
+      teacherId: req.user.id,
+      isArchived: isArchived === 'true' ? true : false // Default to active students
     };
-    
-    if (isActive !== undefined) {
-      where.isActive = isActive === 'true';
-    }
     
     if (search) {
       where.OR = [
@@ -537,6 +672,8 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  restoreUser,
+  getArchivedUsers,
   getMyStudents,
   resetUserPassword
 };

@@ -88,10 +88,10 @@ const login = async (req, res, next) => {
       );
     }
 
-    // Check if account is active
-    if (!user.isActive) {
+    // Check if account is archived
+    if (user.isArchived) {
       return res.status(401).json(
-        errorResponse('Account has been deactivated')
+        errorResponse('Account has been archived')
       );
     }
 

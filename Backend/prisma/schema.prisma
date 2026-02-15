@@ -24,7 +24,7 @@ model User {
   role          UserRole   @default(STUDENT)
   firstName     String?
   lastName      String?
-  isActive      Boolean    @default(true)
+  isArchived    Boolean    @default(false)
   isVerified    Boolean    @default(false)
   lastLogin     DateTime?
   createdAt     DateTime   @default(now())
@@ -100,4 +100,21 @@ model Score {
   examId      String
 
   @@map("scores")
+}
+
+model ArchivedUser {
+  id            String     @id @default(cuid())
+  userId        String     @unique // Original user ID
+  username      String
+  email         String
+  role          UserRole
+  firstName     String?
+  lastName      String?
+  teacherId     String?
+  archivedAt    DateTime   @default(now())
+  archivedBy    String     // ID of user who archived
+  archiveReason String?
+  userData      Json       // Store complete user data as JSON for restoration
+
+  @@map("archived_users")
 }

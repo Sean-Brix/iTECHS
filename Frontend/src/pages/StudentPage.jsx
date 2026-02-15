@@ -98,21 +98,6 @@ const StudentPage = () => {
         {/* Sidebar */}
         <div className="w-80 bg-white shadow-lg overflow-y-auto">
           <div className="p-6">
-            {/* Quick Stats */}
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-xl mb-6">
-              <h3 className="text-lg font-semibold mb-2">My Progress</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{joinedExams.length}</div>
-                  <div className="text-sm opacity-90">Total Exams</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{finishedExams.length}</div>
-                  <div className="text-sm opacity-90">Completed</div>
-                </div>
-              </div>
-            </div>
-
             {/* Exam Tabs */}
             <div className="mb-4">
               <div className="flex bg-gray-100 rounded-lg p-1">
